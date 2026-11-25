@@ -1,0 +1,271 @@
+import React from 'react';
+import { Eye, Edit2, Trash2, Calendar, Layers, Mail, Users, CheckCircle2, Loader2, RotateCcw } from 'lucide-react';
+import { getAvatarColor, getInitials } from '../utils/colors';
+
+export default function TaskTable({
+  tasks,
+  hasAnyTasks = false,
+  loading,
+  onViewTask,
+  onEditTask,
+  onDeleteTask,
+  onQuickStatusChange,
+  onSendEmail,
+  onSendEmailToAll,
+  sendingTaskIds = [],
+  failedTaskIds = [],
+}) {
+  if (loading) {
+    return (
+      <div className="loading-state">
+        <div className="spinner"></div>
+        <span style={{ fontSize: '13px', fontWeight: 600 }}>Syncing task inventory...</span>
+      </div>
+    );
+  }
+
+  if (!tasks || tasks.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state-icon">
+          <Layers size={28} />
+        </div>
+        <div className="empty-state-title">
+          {hasAnyTasks ? 'No matching tasks found' : 'No tasks created yet'}
+        </div>
+        <p style={{ fontSize: '13px', maxWidth: '380px', margin: '0 auto', color: 'var(--text-muted)' }}>
+          {hasAnyTasks
+            ? 'No tasks match your selected filter criteria. Try changing filters or searching for another keyword.'
+            : 'Create a task and assign it to an employee to see it in the task inventory.'}
+        </p>
+      </div>
+    );
+  }
+
+  const formatCreatedDate = (dateStr) => {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  return (
+    <div className="table-wrapper">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>ID & Task</th>
+            <th>Assigned To</th>
+            <th>Department</th>
+            <th>Priority</th>
+            <th>Due Date</th>
+            <th>Status & Lifecycle</th>
+            <th>Created</th>
+            <th style={{ textAlign: 'right' }}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => {
+            const colors = getAvatarColor(task.assigned_to?.name, task.assigned_to?.id);
+            const priorityClass = `badge-priority-${task.priority.toLowerCase()}`;
+            const statusClass = `badge-${task.status.toLowerCase()}`;
+            const dept = task.department || task.assigned_to?.department;
+            const isSending = sendingTaskIds.includes(task.id);
+            const isFailed = failedTaskIds.includes(task.id);
+
+            return (
+              <tr key={task.id}>
+                {/* Task Title & Description */}
+                <td style={{ minWidth: '240px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-light)' }}>
+                      #{task.id}
+                    </span>
+                    <div
+                      className="table-task-title"
+                      onClick={() => onViewTask(task)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {task.title}
+                    </div>
+                  </div>
+                  <div className="table-task-desc">{task.description}</div>
+                </td>
+
+                {/* Assigned To */}
+                <td>
+                  <div className="user-badge" title={task.assigned_to?.email}>
+                    <div
+                      className="user-avatar"
+                      style={{
+                        background: colors.bg,
+                        color: colors.text,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      {getInitials(task.assigned_to?.name)}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '13px' }}>
+                        {task.assigned_to?.name || 'Unassigned'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        {task.assigned_to?.email || '—'}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+
+                {/* Department */}
+                <td>
+                  {dept ? (
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--primary)',
+                        background: 'var(--primary-subtle)',
+                        border: '1px solid var(--primary-border)',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {dept}
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
+                  )}
+                </td>
+
+                {/* Priority */}
+                <td>
+                  <span className={`badge ${priorityClass}`}>
+                    <span className="badge-dot"></span>
+                    {task.priority}
+                  </span>
+                </td>
+
+                {/* Due Date */}
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                    <Calendar size={13} color="var(--text-muted)" />
+                    <span>{task.due_date}</span>
+                  </div>
+                </td>
+
+                {/* Status & Lifecycle Action Area */}
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span className={`badge ${statusClass}`}>
+                      <span className="badge-dot"></span>
+                      {task.status === 'pending'
+                        ? 'Pending Delivery'
+                        : task.status === 'sent'
+                        ? 'Dispatched'
+                        : 'Completed'}
+                    </span>
+
+                    {/* Controlled Send Now action strictly for Pending tasks */}
+                    {task.status === 'pending' && onSendEmail && (
+                      isSending ? (
+                        <button
+                          className="btn-task-send-email sending"
+                          disabled
+                          title="Sending email to employee immediately..."
+                        >
+                          <Loader2 size={12} className="spin-icon" />
+                          <span>Sending...</span>
+                        </button>
+                      ) : isFailed ? (
+                        <button
+                          className="btn-task-send-email retry"
+                          onClick={() => onSendEmail(task)}
+                          title="Email delivery failed. Click to send immediately."
+                        >
+                          <RotateCcw size={12} />
+                          <span>Send Now</span>
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-task-send-email"
+                          onClick={() => onSendEmail(task)}
+                          title="Send this pending task immediately instead of waiting for the next worker cycle"
+                        >
+                          <Mail size={12} />
+                          <span>Send Now</span>
+                        </button>
+                      )
+                    )}
+
+                    {/* Quick advance to Done strictly for Sent tasks */}
+                    {task.status === 'sent' && onQuickStatusChange && (
+                      <button
+                        className="btn-icon"
+                        onClick={() => onQuickStatusChange(task.id, 'done')}
+                        title="Mark Task as Completed"
+                        style={{ color: 'var(--done-dot)', padding: '3px' }}
+                      >
+                        <CheckCircle2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </td>
+
+                {/* Created Date */}
+                <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  {formatCreatedDate(task.created_at)}
+                </td>
+
+                {/* Actions */}
+                <td style={{ textAlign: 'right' }}>
+                  <div className="table-actions" style={{ justifyContent: 'flex-end', display: 'flex', gap: '4px' }}>
+                    {onSendEmailToAll && (
+                      <button
+                        className="btn-icon"
+                        onClick={() => onSendEmailToAll(task)}
+                        title="Broadcast task email to all active employees"
+                        style={{ color: '#059669' }}
+                      >
+                        <Users size={15} />
+                      </button>
+                    )}
+                    <button
+                      className="btn-icon"
+                      onClick={() => onViewTask(task)}
+                      title="View Details"
+                    >
+                      <Eye size={15} />
+                    </button>
+                    <button
+                      className="btn-icon"
+                      onClick={() => onEditTask(task)}
+                      title="Edit Task"
+                    >
+                      <Edit2 size={15} />
+                    </button>
+                    <button
+                      className="btn-icon"
+                      onClick={() => onDeleteTask(task)}
+                      title="Delete Task"
+                      style={{ color: 'var(--high-dot)' }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}

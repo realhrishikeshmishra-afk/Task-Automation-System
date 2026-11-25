@@ -1,0 +1,156 @@
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+/**
+ * Universal request helper with unified error extraction
+ */
+async function request(endpoint, options = {}) {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  const config = {
+    ...options,
+    headers,
+  };
+
+  try {
+    const response = await fetch(url, config);
+    let data = null;
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    }
+
+    if (!response.ok) {
+      let errorMessage = 'An unexpected error occurred.';
+      if (data && data.detail) {
+        if (typeof data.detail === 'string') {
+          errorMessage = data.detail;
+        } else if (Array.isArray(data.detail)) {
+          // Pydantic validation error format
+          errorMessage = data.detail.map((err) => `${err.loc.slice(1).join('.')}: ${err.msg}`).join(', ');
+        }
+      }
+      const error = new Error(errorMessage);
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+
+    return data;
+  } catch (err) {
+    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      const backendUrl = API_BASE_URL || 'the configured API proxy';
+      throw new Error(`Cannot connect to backend server at ${backendUrl}. Please ensure the FastAPI backend is running.`);
+    }
+    throw err;
+  }
+}
+
+export const api = {
+  // --------------------------------------------------------------------------
+  // Employees API
+  // --------------------------------------------------------------------------
+  getEmployees: (active = null, department = null) => {
+    const params = new URLSearchParams();
+    if (active !== null && active !== undefined) {
+      params.append('active', Boolean(active));
+    }
+    if (department && department !== 'All') {
+      params.append('department', department);
+    }
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return request(`/api/employees${queryString}`);
+  },
+
+  getEmployee: (employeeId) => request(`/api/employees/${employeeId}`),
+
+  createEmployee: (payload) =>
+    request('/api/employees', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateEmployee: (employeeId, payload) =>
+    request(`/api/employees/${employeeId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  deactivateEmployee: (employeeId) =>
+    request(`/api/employees/${employeeId}?permanent=false`, {
+      method: 'DELETE',
+    }),
+
+  deleteEmployee: (employeeId, permanent = true) =>
+    request(`/api/employees/${employeeId}?permanent=${permanent}`, {
+      method: 'DELETE',
+    }),
+
+  // --------------------------------------------------------------------------
+  // Tasks API
+  // --------------------------------------------------------------------------
+  getTasks: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.status && filters.status !== 'All') {
+      params.append('status', filters.status);
+    }
+    if (filters.assignee && filters.assignee !== 'All') {
+      params.append('assignee', filters.assignee);
+    }
+    if (filters.priority && filters.priority !== 'All') {
+      params.append('priority', filters.priority);
+    }
+    if (filters.department && filters.department !== 'All') {
+      params.append('department', filters.department);
+    }
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return request(`/api/tasks${queryString}`);
+  },
+
+  getPendingTasks: () => request('/api/tasks/pending'),
+
+  getTask: (taskId) => request(`/api/tasks/${taskId}`),
+
+  createTask: (payload) =>
+    request('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateTask: (taskId, payload) =>
+    request(`/api/tasks/${taskId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  updateTaskStatus: (taskId, status) =>
+    request(`/api/tasks/${taskId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  deleteTask: (taskId) =>
+    request(`/api/tasks/${taskId}`, {
+      method: 'DELETE',
+    }),
+
+  sendTaskEmail: (taskId) =>
+    request(`/api/tasks/${taskId}/send`, {
+      method: 'POST',
+    }),
+
+  sendTaskEmailToAll: (taskId, departmentOnly = false) =>
+    request(`/api/tasks/${taskId}/send-all?department_only=${departmentOnly}`, {
+      method: 'POST',
+    }),
+
+  // --------------------------------------------------------------------------
+  // Dashboard API
+  // --------------------------------------------------------------------------
+  getDashboardStats: () => request('/api/dashboard/stats'),
+};
+
