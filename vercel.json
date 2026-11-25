@@ -1,10 +1,40 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/dist",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "backend": {
+      "root": "backend",
+      "framework": "fastapi",
+      "buildCommand": "pip install -r requirements.txt"
+    },
+    "email-worker": {
+      "root": "email_worker",
+      "runtime": "python",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "BACKEND_URL"
+        }
+      ]
+    },
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite"
+    }
+  },
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": {
+        "service": "frontend"
+      }
     }
   ]
 }
